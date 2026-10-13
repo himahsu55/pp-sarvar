@@ -1,0 +1,72 @@
+{
+  "nextUserId": 2,
+  "nextPunchId": 1,
+  "nextEventId": 1,
+  "users": [
+    {
+      "id": 1,
+      "employee_id": "admin",
+      "name": "Administrator",
+      "password_hash": "$2a$12$UxpdJRYtqV2sborgCtQ1q.x6IWtmcsoZ.FYwob0xJrz7hsgo/Zof6",
+      "role": "ADMIN",
+      "active": true,
+      "shift_start": "09:00",
+      "shift_end": "18:00",
+      "token_version": 2,
+      "created_at": "2026-10-14T00:00:00.000Z"
+    }
+  ],
+  "punches": [],
+  "settings": {
+    "lock": {
+      "enabled": true,
+      "apps": [
+        {
+          "package": "com.instagram.android",
+          "label": "Instagram"
+        },
+        {
+          "package": "com.instagram.lite",
+          "label": "Instagram Lite"
+        },
+        {
+          "package": "com.google.android.youtube",
+          "label": "YouTube"
+        },
+        {
+          "package": "com.facebook.katana",
+          "label": "Facebook"
+        },
+        {
+          "package": "com.facebook.lite",
+          "label": "Facebook Lite"
+        },
+        {
+          "package": "com.snapchat.android",
+          "label": "Snapchat"
+        },
+        {
+          "package": "com.twitter.android",
+          "label": "X (Twitter)"
+        },
+        {
+          "package": "com.reddit.frontpage",
+          "label": "Reddit"
+        },
+        {
+          "package": "com.netflix.mediaclient",
+          "label": "Netflix"
+        },
+        {
+          "package": "in.mohalla.sharechat",
+          "label": "ShareChat"
+        },
+        {
+          "package": "in.mohalla.video",
+          "label": "Moj"
+        }
+      ]
+    }
+  },
+  "lock_events": []
+}

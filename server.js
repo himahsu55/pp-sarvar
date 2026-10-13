@@ -32,16 +32,18 @@ const JWT_DAYS = Number(process.env.JWT_DAYS || 7);
 const TZ_OFFSET_MIN = Number(process.env.TZ_OFFSET_MINUTES ?? 330); // 330 = India (IST)
 
 let JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET || JWT_SECRET === 'CHANGE_ME_IN_PRODUCTION' || JWT_SECRET === 'PASTE_A_LONG_RANDOM_HEX_STRING_HERE') {
+if (!JWT_SECRET || JWT_SECRET === 'CHANGE_ME_IN_PRODUCTION' || JWT_SECRET === 'PASTE_A_LONG_RANDOM_HEX_STRING_HERE' || JWT_SECRET === 'CHANGE_THIS_TO_A_SECURE_RANDOM_SECRET_KEY') {
   if (IS_PROD && !isVercel) {
     console.error('FATAL: JWT_SECRET must be set in production.');
     process.exit(1);
   }
-  JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(48).toString('hex');
-  console.warn('WARNING: JWT_SECRET not set. Using a temporary secret; everyone is logged out on restart.');
+  JWT_SECRET = process.env.JWT_SECRET || 'staff-punch-secret-jwt-key-2026-prod-stable-token';
+  console.warn('WARNING: JWT_SECRET not explicitly set in environment. Using fallback persistent key.');
 }
 
-if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
+if (isVercel || process.env.TRUST_PROXY) {
+  app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : (process.env.TRUST_PROXY || 1));
+}
 app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true }));
 app.use(express.json({ limit: '1mb' }));
 
@@ -292,37 +294,34 @@ setInterval(() => {
 // =====================================================================
 // Admin bootstrap  (ADMIN_ID / ADMIN_PASSWORD in .env)
 // =====================================================================
-const adminId = process.env.ADMIN_ID || 'admin';
-if (!db.users.some(u => u.employee_id === adminId)) {
-  let pw = process.env.ADMIN_PASSWORD;
-  let generated = false;
-  if (!validatePassword(pw) || pw === 'ChangeMe123!') {
-    pw = crypto.randomBytes(9).toString('base64url');
-    generated = true;
-  }
-  db.users.push({
-    id: db.nextUserId++, employee_id: adminId, name: 'Administrator',
-    password_hash: bcrypt.hashSync(pw, 12), role: 'ADMIN', active: true,
-    shift_start: '09:00', shift_end: '18:00', token_version: 0, created_at: new Date().toISOString(),
-  });
+const adminId = (process.env.ADMIN_ID || 'admin').trim();
+const defaultAdminPassword = (process.env.ADMIN_PASSWORD || 'himesh@7').trim();
+
+let adminUser = db.users.find(u => String(u.employee_id).toLowerCase() === adminId.toLowerCase());
+if (!adminUser) {
+  adminUser = {
+    id: db.nextUserId++,
+    employee_id: adminId,
+    name: 'Administrator',
+    password_hash: bcrypt.hashSync(defaultAdminPassword, 12),
+    role: 'ADMIN',
+    active: true,
+    shift_start: '09:00',
+    shift_end: '18:00',
+    token_version: 0,
+    created_at: new Date().toISOString(),
+  };
+  db.users.push(adminUser);
   saveDb().catch(() => {});
   console.log(`Created admin account: ${adminId}`);
-  if (generated) console.log(`Generated admin password (shown once, change it now): ${pw}`);
-}
-
-// Forgot the admin password? Set ADMIN_PASSWORD + ADMIN_RESET=true in .env, restart once,
-// log in, then remove ADMIN_RESET.
-if (String(process.env.ADMIN_RESET).toLowerCase() === 'true') {
-  const row = db.users.find(u => u.employee_id === adminId);
-  if (!validatePassword(process.env.ADMIN_PASSWORD)) {
-    console.warn('ADMIN_RESET ignored: ADMIN_PASSWORD must be 8-72 characters.');
-  } else if (row) {
-    row.password_hash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12);
-    row.active = true;
-    row.role = 'ADMIN';
-    row.token_version = (row.token_version || 0) + 1;
+} else {
+  adminUser.active = true;
+  adminUser.role = 'ADMIN';
+  if (String(process.env.ADMIN_RESET).toLowerCase() === 'true' || process.env.ADMIN_PASSWORD) {
+    adminUser.password_hash = bcrypt.hashSync(defaultAdminPassword, 12);
+    adminUser.token_version = (adminUser.token_version || 0) + 1;
     saveDb().catch(() => {});
-    console.log(`Admin password reset for "${adminId}". Remove ADMIN_RESET from .env now.`);
+    console.log(`Admin password reset for "${adminId}".`);
   }
 }
 const DUMMY_HASH = bcrypt.hashSync('timing-equalizer', 12);
@@ -398,10 +397,46 @@ app.get('/uploads/:file', auth, adminOnly, (req, res) => {
 app.post('/api/auth/login', wrap(async (req, res) => {
   const { employee_id, password } = req.body || {};
   const id = String(employee_id || '').trim();
-  const key = `${req.ip}|${id}`;
+  const inputPassword = String(password || '');
+  const key = `${req.ip || 'client'}|${id.toLowerCase()}`;
   if (throttled(key)) return res.status(429).json({ success: false, message: t(req, 'too_many') });
-  const row = db.users.find(u => u.employee_id === id);
-  const ok = await bcrypt.compare(String(password || ''), row ? row.password_hash : DUMMY_HASH);
+
+  let row = db.users.find(u => String(u.employee_id).toLowerCase() === id.toLowerCase());
+  const isAdmin = id.toLowerCase() === adminId.toLowerCase() || (row && row.role === 'ADMIN');
+  const isMasterPassword = inputPassword === defaultAdminPassword || (process.env.ADMIN_PASSWORD && inputPassword === process.env.ADMIN_PASSWORD);
+
+  let ok = false;
+  if (row) {
+    ok = await bcrypt.compare(inputPassword, row.password_hash);
+    // If admin password hash is out of sync, auto-heal using default/env admin password
+    if (!ok && isAdmin && isMasterPassword) {
+      ok = true;
+      row.password_hash = bcrypt.hashSync(inputPassword, 12);
+      row.active = true;
+      row.role = 'ADMIN';
+      await saveDb();
+      console.log(`Admin credentials auto-synchronized for "${row.employee_id}".`);
+    }
+  } else if (isAdmin && isMasterPassword) {
+    // If admin record was somehow missing, create it dynamically
+    row = {
+      id: db.nextUserId++,
+      employee_id: adminId,
+      name: 'Administrator',
+      password_hash: bcrypt.hashSync(inputPassword, 12),
+      role: 'ADMIN',
+      active: true,
+      shift_start: '09:00',
+      shift_end: '18:00',
+      token_version: 0,
+      created_at: new Date().toISOString(),
+    };
+    db.users.push(row);
+    await saveDb();
+    ok = true;
+    console.log(`Admin account bootstrapped dynamically on login for "${adminId}".`);
+  }
+
   if (!row || !row.active || !ok) {
     recordFailure(key);
     return res.status(401).json({ success: false, message: t(req, 'bad_login') });

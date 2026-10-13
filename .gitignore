@@ -7,7 +7,9 @@ node_modules/
 .env.*.local
 
 # Local application data and backups
-data/
+data/*
+!data/attendance.json
+data/selfies/
 backups/
 
 # Logs
