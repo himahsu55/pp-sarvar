@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment files (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Local application data and backups
+data/
+backups/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vercel build output
+.vercel/
+
+# OS metadata
+.DS_Store
+Thumbs.db
