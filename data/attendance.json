@@ -7,12 +7,12 @@
       "id": 1,
       "employee_id": "admin",
       "name": "Administrator",
-      "password_hash": "$2a$12$UxpdJRYtqV2sborgCtQ1q.x6IWtmcsoZ.FYwob0xJrz7hsgo/Zof6",
+      "password_hash": "$2a$12$dVp3SxrQ/1IEe/SKioATj.L.VMVWyEu7Pjz1.ZbSTR58yON7HS7kK",
       "role": "ADMIN",
       "active": true,
       "shift_start": "09:00",
       "shift_end": "18:00",
-      "token_version": 2,
+      "token_version": 3,
       "created_at": "2026-10-14T00:00:00.000Z"
     }
   ],
